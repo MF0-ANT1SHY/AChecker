@@ -12,6 +12,7 @@ from src.evm.exceptions import TimeoutException
 
 class CFG(object):
     def __init__(self, bbs, fix_xrefs=True, fix_only_easy_xrefs=False):
+        self.jumpcount = 0
         self.bbs = sorted(bbs)
         self._bb_at = {bb.start: bb for bb in self.bbs}
         self._ins_at = {i.addr: i for bb in self.bbs for i in bb.ins}
@@ -60,7 +61,8 @@ class CFG(object):
         while new_link:
             new_link = False
             for pred in self.bbs:                
-                if not pred.jump_resolved:                                
+                if not pred.jump_resolved:  
+                    self.jumpcount+=1                              
                     succ_addrs, new_succ_addrs = pred.get_succ_addrs_full(self.valid_jump_targets)
                     for new_succ_path, succ_addr in new_succ_addrs:
                         if succ_addr not in self._bb_at:

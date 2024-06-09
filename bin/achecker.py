@@ -22,8 +22,23 @@ import src.flow.code_info as cinfo
 from src.storage import resolve_all_storage
 from src.flow.symbolic import validate_path
 from src.evm.exceptions import TimeoutException
+import gc
+import psutil
+import signal
+import time
+from src.util.logmanager import setuplogger
 
 logging.basicConfig(level=logging.INFO)
+
+timeout_seconds = 30 * 60  # 超时时间
+
+
+class TimeoutException(Exception):
+    pass
+
+
+def handle_timeout(signum, frame):
+    raise TimeoutException("Execution timed out")
 
 def hex_encode(d):
     return {k: v.hex() if isinstance(v, bytes) else v for k, v in d.items()}
@@ -93,6 +108,12 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
     missing_ac_count = 0
     violated_ac_ib_count = 0    
     
+    projectinstance = p
+    VACisworth = True
+    MACisworth = True
+    process = psutil.Process(os.getpid())
+    peak_memory_use = 0
+    
     ac_checks_sloads = []            
     for defect_type in list(['Violated-AC-Check','Missing-AC-Check']):
         print("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
@@ -106,6 +127,7 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
             ins = p.cfg.filter_ins('JUMPI', reachable=True)
             restricted=True
             if not ins:
+                VACisworth = False
                 continue
             ins_type = set(s.name for s in ins).pop()            
             args = opcodes.CRITICAL_ARGS[ins_type] 
@@ -263,7 +285,8 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
             kill_ins= p.cfg.filter_ins('SELFDESTRUCT', reachable=True)
             call_ins= p.cfg.filter_ins('DELEGATECALL', reachable=True)
             ins = [*kill_ins, *call_ins]             
-            if not ins:        
+            if not ins:     
+                MACisworth = False   
                 continue
             ins_types= list(set(s.name for s in ins)) + ['acsbl_sdestruct']                       
             for ins_type in ins_types :                                            
@@ -346,9 +369,17 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                         print("%s\n" %s)  
                         if not MissingIntendedB:
                             missing_ac_count+=1
-                
-    return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
+    current_memory = process.memory_info().rss / (1024 * 1024)
+    if current_memory > peak_memory_use:
+        peak_memory_use = current_memory
+    return (AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count),        
+        peak_memory_use,
+        projectinstance.cfg.jumpcount,
+        VACisworth,
+        MACisworth)
+    
 def main():
+    logger = setuplogger()
     parser = argparse.ArgumentParser()
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument("-f", "--file", type=str,
@@ -412,11 +443,66 @@ def main():
             p = Project(code)            
             analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)            
     else:
-        with open(args.file)  as infile:
-            inbuffer = infile.read().rstrip()            
-        code = bytes.fromhex(inbuffer)                
-        p = Project(code)        
-        analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)
+        process = psutil.Process(os.getpid())
+        mem = None
+        jcount = None
+        ULisworth = None
+        DFisworth = None
+        CFG_duration = None
+        CFG_endmem = None
+        isTimeout = False
+        isMemoryError = False
+        exception = None
+        file_size = 0
+        # 记录起始时间
+        _start = time.time()
+        signal.signal(signal.SIGALRM, handle_timeout)
+        signal.alarm(timeout_seconds)
+        # 记录起始内存
+        startmem = process.memory_info().rss / (1024 * 1024)
+        try:
+            with open(args.file) as infile:
+                inbuffer = infile.read().rstrip()
+            name = args.file.rsplit("/", 1)[-1]
+            file_size = os.path.getsize(args.file)
+            if inbuffer.startswith("0x"):
+                inbuffer = inbuffer[2:]
+            code = bytes.fromhex(inbuffer)
+            p = Project(code)
+            CFG_endtime = time.time()
+            CFG_endmem = process.memory_info().rss / (1024 * 1024) - startmem
+            CFG_duration = CFG_endtime - _start
+            res, mem, jcount, ULisworth, DFisworth = analysis(
+                p, initial_storage=initial_storage
+            )
+        except TimeoutException as e:
+            isTimeout = True
+            gc.collect()
+        except MemoryError as e:
+            isMemoryError = True
+            gc.collect()
+        except Exception as e:
+            exception = e
+            gc.collect()
+        finally:
+            if CFG_endmem is None:
+                CFG_endmem = None
+            if mem is None:
+                mem = process.memory_info().rss / (1024 * 1024) - startmem
+            if jcount is None:
+                jcount = p.cfg.jumpcount
+            if ULisworth is None:
+                ULisworth = None
+            if DFisworth is None:
+                DFisworth = None
+            if CFG_duration is None:
+                CFG_duration = None
+            _end = time.time()
+            signal.alarm(0)
+            _duration = _end - _start
+            logger.info(
+                f"{name},{file_size},{isTimeout},{isMemoryError},{jcount},{CFG_endmem},{ULisworth},{DFisworth},{CFG_duration},{_duration},{mem},{exception}"
+            )
             
     
 if __name__ == '__main__':
