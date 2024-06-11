@@ -1,3 +1,4 @@
 *.pyc 
 AChecker.egg-info/
 .venv
+**/__pycache__/
