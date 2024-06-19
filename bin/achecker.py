@@ -30,7 +30,7 @@ from src.util.logmanager import setuplogger
 
 logging.basicConfig(level=logging.INFO)
 
-timeout_seconds = 30 * 60  # 超时时间
+timeout_seconds = 2 * 60  # 超时时间
 
 
 class TimeoutException(Exception):
