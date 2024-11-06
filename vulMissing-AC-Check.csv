@@ -1,2 +1,5 @@
 time,contract,path
-1730855210.5860076,0x558A8B92EE6a2B724afDEd319b61Ac55B7259826.hex,"[0, 13, 312, 324, 410, 422, 433, 444, 925, 937, 2828, 2920, 9864, 9882, 8151, 898, 1864, 2956, 3020, 3022]"
+1730866335.3491936,access_control.proxy_sol_Proxy.hex,"[0, 13, 70, 82, 207, 249, 276, 321, 337]"
+1730866335.5422702,access_control.proxy_sol_Proxy.hex,"[0, 13, 70, 82, 207, 249, 276, 321, 337]"
+1730866361.1919649,access_control.simple_suicide_sol_SimpleSuicide.hex,"[0, 12, 68, 79, 88, 112]"
+1730866361.2972357,access_control.simple_suicide_sol_SimpleSuicide.hex,"[0, 12, 68, 79, 88, 112]"

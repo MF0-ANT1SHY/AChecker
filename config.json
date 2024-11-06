@@ -1,6 +1,6 @@
 [
     {
-        "timeout": 300,
-        "from": "/data1/sureyang/20KB"
+        "timeout": 1800,
+        "from": "/home/shuo/smartbugs-curated/full"
     }
 ]
