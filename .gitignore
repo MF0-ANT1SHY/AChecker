@@ -1,2 +1,3 @@
 *.pyc 
 AChecker.egg-info/
+.venv/

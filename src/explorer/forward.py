@@ -68,6 +68,21 @@ class ForwardExplorer(object):
             return state.branches
         else:
             return state.branches + min(self.dist_map[s[0].bb.start][state.bb] for s in state.slices)
+        
+    def edge_in_path(self,path):
+        B = self.cfg.newlinks
+        edge_set = {(v, u) for v, u in B}
+
+        # 遍历路径A中的所有连续节点对
+        if len(path) < 1:
+            return False
+        for i in range(len(path) - 1):
+            current_edge = (path[i], path[i + 1])
+            # print(f"current edge is {current_edge} and updated edge are {edge_set}")
+            if current_edge in edge_set:
+                return True
+
+        return False
 
     def find(self, slices, looplimit=2, avoid=frozenset(), prefix=None):    
         avoid = frozenset(avoid)
@@ -94,14 +109,20 @@ class ForwardExplorer(object):
         todo.put(state)
           
         while not todo.empty():                                                
-            state = todo.get()            
+            state = todo.get()     
+            if (not (state.bb.descendants & self.cfg.updated_bbs)) and (not state.bb.start in self.cfg.updated_bbs):  # reachable?
+                if not self.edge_in_path(state.path):
+                    # print(f"it seems not to be a new exploration")
+                    continue
+
             if any(is_substr(pth, state.path) for pth in self.blacklist):
                 logging.info("BLACKLIST hit for %s" % (', '.join('%x' % i for i in state.path)))
                 continue            
             if set(i.name for i in state.bb.ins) & avoid:                            
                 continue
             if state.finished:                
-                for last_pc in state.finished:                                                        
+                for last_pc in state.finished:    
+                    # print(f"full path is: {state.path}")                                                    
                     yield state.path + [last_pc]
                 state.finished = set()
                 state.slices = tuple(s for s in state.slices if s)

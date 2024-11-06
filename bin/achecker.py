@@ -413,7 +413,9 @@ def main():
             analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)            
     else:
         with open(args.file)  as infile:
-            inbuffer = infile.read().rstrip()            
+            inbuffer = infile.read().rstrip()   
+        if inbuffer.startswith("0x"):
+            inbuffer = inbuffer[2:]   
         code = bytes.fromhex(inbuffer)                
         p = Project(code)        
         analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)

@@ -1,4 +1,5 @@
 import logging
+import networkx as nx
 from collections import deque
 from src.cfg.bb import BB
 import src.cfg.rattle as rattle
@@ -12,6 +13,10 @@ from src.evm.exceptions import TimeoutException
 
 class CFG(object):
     def __init__(self, bbs, fix_xrefs=True, fix_only_easy_xrefs=False):
+        self.iteration = 0
+        self.iscomplete = False
+        self.newlinks = []
+        self._links = nx.DiGraph()
         self.bbs = sorted(bbs)
         self._bb_at = {bb.start: bb for bb in self.bbs}
         self._ins_at = {i.addr: i for bb in self.bbs for i in bb.ins}
@@ -39,12 +44,8 @@ class CFG(object):
             return [ins for bb in self.bbs for ins in bb.ins if ins.name in names and 0 in bb.ancestors | {bb.start}]
 
     def _xrefs(self, fix_only_easy_xrefs=False):
-        # logging.debug('Fixing Xrefs')
         self._easy_xrefs()        
-        # logging.debug('Easy Xrefs fixed, turning to hard ones now')
-        if not fix_only_easy_xrefs:
-            self._hard_xrefs()            
-            # logging.debug('Hard Xrefs also fixed, good to go')
+        # print(f"iteration is: {self.updated_bbs}")
 
     def _easy_xrefs(self):
         for pred in self.bbs:
@@ -52,35 +53,65 @@ class CFG(object):
                 if succ_addr and succ_addr in self._bb_at:
                     succ = self._bb_at[succ_addr]
                     pred.add_succ(succ, {pred.start})
+                    self._links.add_edge(pred.start, succ.start)
+                    self.newlinks.append((pred.start, succ.start))
 
     def _hard_xrefs(self):
-        new_link = True
+        self.iscomplete = True
         links = set()
         stime=time.time()
-        while new_link:
-            new_link = False
-            for pred in self.bbs:                
-                if not pred.jump_resolved:                                
-                    succ_addrs, new_succ_addrs = pred.get_succ_addrs_full(self.valid_jump_targets)
-                    for new_succ_path, succ_addr in new_succ_addrs:
-                        if succ_addr not in self._bb_at:
-                            logging.warning(
-                                'WARNING, NO BB @ %x (possible successor of BB @ %x)' % (succ_addr, pred.start))
-                            continue
-                        succ = self._bb_at[succ_addr]
-                        pred.add_succ(succ, new_succ_path)
-                        if not (pred.start, succ.start) in links:
-                            # logging.debug('found new link from %x to %x', pred.start, succ.start)
-                            # with open('cfg-tmp%d.dot' % len(links), 'w') as outfile:
-                            #    outfile.write(self.to_dot())
-                            new_link = True
-                            links.add((pred.start, succ.start))
+        bbs = [bb for bb in self.bbs if 0 in bb.ancestors | {bb.start}]
+        for pred in bbs:                
+            if not pred.jump_resolved:                                
+                succ_addrs, new_succ_addrs = pred.get_succ_addrs_full(self.valid_jump_targets)
+                for new_succ_path, succ_addr in new_succ_addrs:
+                    if succ_addr not in self._bb_at:
+                        logging.warning(
+                            'WARNING, NO BB @ %x (possible successor of BB @ %x)' % (succ_addr, pred.start))
+                        continue
+                    succ = self._bb_at[succ_addr]
+                    pred.add_succ(succ, new_succ_path)
+                    if not (pred.start, succ.start) in links:
+                        self.iscomplete = False
+                        links.add((pred.start, succ.start))
+                        self._links.add_edge(pred.start, succ.start)
+                        self.newlinks.append((pred.start, succ.start))
+
     def data_dependence(self, ins):
         if not ins in self._dd:
             from src.slicing import backward_slice
             self._dd[ins] = set(i for s in backward_slice(ins) for i in s if i.bb)
         return self._dd[ins]
 
+    def update_cfg(self, restricted=None, logger=None):
+        """
+        Updates the CFG and returns whether any new changes were made.
+        Returns:
+            bool: True if new links were added, False otherwise
+        """
+        self.iteration += 1
+        
+        if self.iscomplete:
+            return False  # No changes if already complete
+                    
+        # Update links
+        self.newlinks = []
+        self._hard_xrefs()
+        
+        # Return whether new links were added
+        return len(self.newlinks) > 0
+        
+    @property
+    def updated_bbs(self):
+        """
+        返回最近一次更新的bb(object)组成的列表
+        """
+        res = []
+        for edge in self.newlinks:
+            res.append(self._bb_at[edge[0]].start)
+        res = set(res)
+        return res
+    
     @property
     def dominators(self):
         if not self._dominators:
