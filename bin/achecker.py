@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import time
+import csv
 import json
 import logging
 import resource
@@ -24,6 +26,21 @@ from src.flow.symbolic import validate_path
 from src.evm.exceptions import TimeoutException
 
 logging.basicConfig(level=logging.INFO)
+
+def collectpath(defecttype, time, contract, path):
+    filename = f"vul{defecttype}.csv"
+    file_exists = os.path.isfile(filename)
+
+    with open(filename, "a", newline="") as csvfile:
+        fieldnames = ["time", "contract", "path"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerow(
+            {"time": time, "contract": contract, "path": path}
+        )
 
 def hex_encode(d):
     return {k: v.hex() if isinstance(v, bytes) else v for k, v in d.items()}
@@ -241,7 +258,8 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                         if not reported:                                                                                         
                             print("\n{0} in function {1}".format(user_alerts[defect_type], ac_function))
                             print("\t%s" %i)                                                                                                                                                                                  
-                            reported = True                            
+                            reported = True      
+                            collectpath(defect_type, time.time(), p.name, i_path)                      
                         if mode =='FIntendedB':                                                                                    
                             ac_checks_in_sstore_path = [ins for ins in storage_info if ins in ac_checks_sloads and ins.bb.start in tainted_sstores[sstore_ins][:-1]]                            
                             taint_valid_results =None
@@ -255,6 +273,7 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                                     print("+--(Potentially Intended Behavior) Attacker can make changes to AC item {0} in function {1}".format(set(sstore_slot), sstore_in_function))                                                    
                                     continue                                                        
                         print("+--Attacker can make changes to AC item {0} in function {1}".format(set(sstore_slot), sstore_in_function))
+                        collectpath(defect_type,time.time(),p.name,i_path)
                 if reported and not IntendedB:
                     violated_ac_count+=1
 
@@ -343,6 +362,7 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                         logging.debug("Path: %s", '->'.join('%x' %p for p in j_path))                                    
                         print("({0}) {1} in function {2}".format(user_alerts[tainted_ins[s]["type"]], user_alerts[defect_type],cinfo.get_function_sig(p.cfg, tainting_path)))  
                         print("Needed to protect following instruction in function {0}".format(cinfo.get_function_sig(p.cfg,tainted_ins[s]["path"])))
+                        collectpath(defect_type,time.time(),p.name,tainting_path)
                         print("%s\n" %s)  
                         if not MissingIntendedB:
                             missing_ac_count+=1
@@ -413,9 +433,13 @@ def main():
             analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)            
     else:
         with open(args.file)  as infile:
-            inbuffer = infile.read().rstrip()            
-        code = bytes.fromhex(inbuffer)                
-        p = Project(code)        
+            inbuffer = infile.read().rstrip()   
+        if inbuffer.startswith("0x"):
+            inbuffer = inbuffer[2:]   
+        code = bytes.fromhex(inbuffer)  
+        name = args.file.rsplit("/", 1)[-1]              
+        p = Project(code)
+        p.name = name
         analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)
             
     
