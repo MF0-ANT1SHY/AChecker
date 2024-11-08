@@ -93,7 +93,7 @@ def get_evm(contract):
 
 def analysis(p, initial_storage=dict(), sym_validation= None,
                     mode=None, initial_balance=None,
-                    max_calls=3, controlled_addrs=set(), flags=None):
+                    max_calls=3, controlled_addrs=set(), flags=None,support_vul=None, early_termination=True):
 
     user_alerts = {'Violated-AC-Check':'Violated access control check', \
                     'Missing-AC-Check':'Missing access control check', \
@@ -111,7 +111,15 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
     violated_ac_ib_count = 0    
     
     ac_checks_sloads = []            
-    for defect_type in list(['Violated-AC-Check','Missing-AC-Check']):
+    defect_types = []
+    if support_vul == 'VACC':
+        defect_types = ['Violated-AC-Check']
+    elif support_vul == 'MACC':
+        defect_types = ['Missing-AC-Check']
+    else:
+        defect_types = ['Violated-AC-Check','Missing-AC-Check']
+
+    for defect_type in list(defect_types):
         print("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
         print("------------------")                    
         ins=[]
@@ -274,6 +282,8 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                                     continue                                                        
                         print("+--Attacker can make changes to AC item {0} in function {1}".format(set(sstore_slot), sstore_in_function))
                         collectpath(defect_type,time.time(),p.name,i_path)
+                        if early_termination:
+                            return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
                 if reported and not IntendedB:
                     violated_ac_count+=1
 
@@ -363,6 +373,8 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                         print("({0}) {1} in function {2}".format(user_alerts[tainted_ins[s]["type"]], user_alerts[defect_type],cinfo.get_function_sig(p.cfg, tainting_path)))  
                         print("Needed to protect following instruction in function {0}".format(cinfo.get_function_sig(p.cfg,tainted_ins[s]["path"])))
                         collectpath(defect_type,time.time(),p.name,tainting_path)
+                        if early_termination:
+                            return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
                         print("%s\n" %s)  
                         if not MissingIntendedB:
                             missing_ac_count+=1
@@ -382,6 +394,12 @@ def main():
 
     parser.add_argument(
         "-sf", "--savefile")
+
+    parser.add_argument(
+        "-v", "--vul", help="supported defect type")
+
+    parser.add_argument(
+        "-t", "--end", help="supported termination type")
 
     parser.add_argument(
         "-m", "--memory", help="Max memory limit")
@@ -415,7 +433,11 @@ def main():
     symbolic_validation= True
     #mode = 'FIntendedB' if args.fib else None
     mode = 'FIntendedB' 
-    
+    isearly = False
+
+    if args.end == "early":
+        isearly = True
+
     initial_storage = dict()
     if args.initial_storage_file:
         with open(args.initial_storage_file, 'rb') as f:
@@ -430,7 +452,7 @@ def main():
             print("------------------\n")            
             code = bytes.fromhex(bin_str)                        
             p = Project(code)            
-            analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)            
+            analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode,support_vul=args.vul,early_termination=isearly)            
     else:
         with open(args.file)  as infile:
             inbuffer = infile.read().rstrip()   
@@ -440,7 +462,7 @@ def main():
         name = args.file.rsplit("/", 1)[-1]              
         p = Project(code)
         p.name = name
-        analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode)
+        analysis(p, initial_storage, sym_validation =symbolic_validation, mode=mode,support_vul=args.vul,early_termination=isearly)
             
     
 if __name__ == '__main__':

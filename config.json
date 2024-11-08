@@ -1,6 +1,7 @@
 [
     {
         "timeout": 1800,
-        "from": "~/smartbugs-curated/full"
+        "from": "~/smartbugs-curated/dataset/access_control",
+        "vul": "-"
     }
 ]
