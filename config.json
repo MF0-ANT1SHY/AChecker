@@ -2,6 +2,6 @@
     {
         "timeout": 1800,
         "from": "~/smartbugs-curated/dataset/access_control",
-        "vul": "-"
+        "vul": "MACC"
     }
 ]
