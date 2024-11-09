@@ -1,4 +1,3 @@
-import cmd
 import os
 import subprocess
 from multiprocessing import Pool
@@ -17,7 +16,7 @@ def append_to_csv(contract, duration):
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         if not file_exists:
-            writer.writeheader()  # 如果文件不存在，写入标题行
+            writer.writeheader()
 
         writer.writerow(
             {
@@ -27,64 +26,69 @@ def append_to_csv(contract, duration):
         )
 
 
-def run_process(file, timeoutsize=2 * 60, vul="Reentrancy"):
+def run_process(args):
+    file, timeoutsize, vul = args
     starttime = time.time()
     name = file.rsplit("/", 1)[-1]
-    cmd = ["python3", "bin/test.py", "-f", file, "-b", "-m", "8"]
+    cmd = ["python3", "bin/test.py", "-f", file, "-b", "-v", vul, "-t", "early"]
     try:
         subprocess.run(cmd, timeout=timeoutsize)
     except subprocess.TimeoutExpired:
-        endtime = time.time()
-        duration = endtime - starttime
+        pass
     finally:
         endtime = time.time()
         duration = endtime - starttime
         append_to_csv(name, duration)
 
 
-def main(timeout=2 * 60, from_dir="./", vul="Reentrancy"):
-    # 获取系统的内存和CPU信息
+def get_file_list(directory_path):
+    filelist = []
+    for filename in os.listdir(directory_path):
+        if filename.endswith(".hex") or filename.endswith(".code"):
+            full_path = os.path.join(directory_path, filename)
+            filelist.append(full_path)
+    return filelist
+
+
+def calculate_pool_size():
     mem = psutil.virtual_memory()
-    available_memory_gb = mem.available / (1024**3)  # 可用内存转换为GB
-    cpu_count = psutil.cpu_count(logical=False)  # 获取物理核心数
+    available_memory_gb = mem.available / (1024**3)
+    cpu_count = psutil.cpu_count(logical=False)
 
     memory_per_process_gb = 8
     max_processes_by_memory = int(available_memory_gb / memory_per_process_gb)
     max_processes_by_cpu = cpu_count
 
-    num_processes = min(max_processes_by_memory, max_processes_by_cpu)
+    return min(max_processes_by_memory, max_processes_by_cpu)
+
+
+def main():
+    with open("config.json", "r") as file:
+        configs = json.load(file)
+
+    num_processes = calculate_pool_size()
     print(f"Starting {num_processes} processes...")
 
-    directories = [
-        os.path.expanduser(from_dir),
-    ]
+    # Create a single pool for all configurations
+    with Pool(num_processes) as pool:
+        all_tasks = []
 
-    pool = Pool(num_processes)
-    print(pool._cache)
+        # Prepare all tasks from all configurations
+        for config in configs:
+            timeout = config["timeout"]
+            from_dir = config["from"]
+            vul = config["vul"]
 
-    filelist = []
+            directory_path = os.path.expanduser(from_dir)
+            filelist = get_file_list(directory_path)
 
-    for directory_path in directories:
-        for filename in os.listdir(directory_path):
-            if filename.endswith(".hex") or filename.endswith(".code"):
-                full_path = os.path.join(directory_path, filename)
-                filelist.append(full_path)
+            # Create tasks for this configuration
+            config_tasks = [(file, timeout, vul) for file in filelist]
+            all_tasks.extend(config_tasks)
 
-    for path in filelist:
-        pool.apply_async(
-            run_process,
-            (path, timeout,vul),
-        )
-    pool.close()
-    pool.join()
+        # Execute all tasks concurrently
+        pool.map(run_process, all_tasks)
 
 
 if __name__ == "__main__":
-    with open("config.json", "r") as file:
-        config = json.load(file)
-        first_config = config[0]
-
-        timeout = first_config["timeout"]
-        from_dir = first_config["from"]
-        vul = 'None'
-    main(timeout, from_dir,vul)
+    main()

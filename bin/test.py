@@ -93,7 +93,7 @@ def get_evm(contract):
 
 def analysis(p, initial_storage=dict(), sym_validation= None,
                     mode=None, initial_balance=None,
-                    max_calls=3, controlled_addrs=set(), flags=None):
+                    max_calls=3, controlled_addrs=set(), flags=None, support_vul=None, early_termination=True):
 
     first_iteration = True
     while first_iteration or p.cfg.update_cfg():
@@ -114,8 +114,17 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
         missing_ac_count = 0
         violated_ac_ib_count = 0    
         
-        ac_checks_sloads = []            
-        for defect_type in list(['Violated-AC-Check','Missing-AC-Check']):
+        ac_checks_sloads = []       
+        defect_types = []
+        if support_vul == "VACC":
+            defect_types = ["Violated-AC-Check"]
+        elif support_vul == "MACC":
+            defect_types = ["Missing-AC-Check"]
+        else:
+            defect_types = ["Violated-AC-Check", "Missing-AC-Check"]
+
+        for defect_type in list(defect_types):   
+        # for defect_type in list(['Violated-AC-Check','Missing-AC-Check']):
             print("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
             print("------------------")                    
             ins=[]
@@ -263,6 +272,7 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                                 print("\n{0} in function {1}".format(user_alerts[defect_type], ac_function))
                                 print("\t%s" %i)                                                                                                                                                                                  
                                 reported = True 
+                                
                                 collectpath(defect_type,time.time(),p.name,i_path)                           
                             if mode =='FIntendedB':                                                                                    
                                 ac_checks_in_sstore_path = [ins for ins in storage_info if ins in ac_checks_sloads and ins.bb.start in tainted_sstores[sstore_ins][:-1]]                            
@@ -277,10 +287,12 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                                         print("+--(Potentially Intended Behavior) Attacker can make changes to AC item {0} in function {1}".format(set(sstore_slot), sstore_in_function))                                                    
                                         continue                                                        
                             print("+--Attacker can make changes to AC item {0} in function {1}".format(set(sstore_slot), sstore_in_function))
-                            collectpath(defect_type,time.time(),p.name,i_path)
                     if reported and not IntendedB:
                         # print(time.time(),defect_type,i_path)
                         violated_ac_count+=1
+                        if support_vul == "VACC" and early_termination:
+                            collectpath(defect_type,time.time(),p.name,i_path)
+                            return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
 
                 print("\n")                        
             elif defect_type in (['Missing-AC-Check']):                
@@ -372,6 +384,9 @@ def analysis(p, initial_storage=dict(), sym_validation= None,
                             if not MissingIntendedB:
                                 # print(time.time(), defect_type, tainting_path)
                                 missing_ac_count+=1
+                                if support_vul == "MACC" and early_termination:
+                                    collectpath(defect_type,time.time(),p.name,i_path)
+                                    return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
                     
     return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
 
