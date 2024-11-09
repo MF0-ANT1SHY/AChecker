@@ -138,8 +138,6 @@ def analysis(
         if support_vul == "VACC":
             defect_types = ["Violated-AC-Check"]
         elif support_vul == "MACC":
-            defect_types = ["Missing-AC-Check"]
-        else:
             defect_types = ["Violated-AC-Check", "Missing-AC-Check"]
 
         for defect_type in list(defect_types):
@@ -736,14 +734,13 @@ def analysis(
                                     )
                                 )
                             )
-                            collectpath(defect_type, time.time(), p.name, tainting_path)
                             print("%s\n" % s)
                             if not MissingIntendedB:
                                 # print(time.time(), defect_type, tainting_path)
                                 missing_ac_count += 1
                                 if support_vul == "MACC" and early_termination:
                                     collectpath(
-                                        defect_type, time.time(), p.name, i_path
+                                        defect_type, time.time(), p.name, tainting_path
                                     )
                                     return AnalysisBugDetails(
                                         violated_ac_count,
