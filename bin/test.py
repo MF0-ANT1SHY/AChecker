@@ -28,18 +28,65 @@ from src.evm.exceptions import TimeoutException
 logging.basicConfig(level=logging.INFO)
 
 
-def collectpath(defecttype, time, contract, path):
-    filename = f"vul{defecttype}.csv"
-    file_exists = os.path.isfile(filename)
+# def collectpath(defecttype, time, contract, path):
+#     filename = f"vul{defecttype}.csv"
+#     file_exists = os.path.isfile(filename)
 
-    with open(filename, "a", newline="") as csvfile:
-        fieldnames = ["time", "contract", "path"]
+#     with open(filename, "a", newline="") as csvfile:
+#         fieldnames = ["time", "contract", "path"]
+#         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+#         if not file_exists:
+#             writer.writeheader()
+
+#         writer.writerow({"time": time, "contract": contract, "path": path})
+
+def collectpath(filename, toolid="achecker", toolmode="runtime", parser_version="2/27/2023", runid=None,start_time=0,defecttype='',path=''):
+    basename = os.path.basename(filename)
+    current_time = time.time()
+    
+    if runid is None:
+        runid = time.strftime("%Y%m%d_%H%M")
+    
+    output_filename = "analysis_results.csv"
+    file_exists = os.path.isfile(output_filename)
+    
+    with open(output_filename, "a", newline="") as csvfile:
+        fieldnames = [
+            "filename", 
+            "basename",
+            "toolid",
+            "toolmode",
+            "parser_version",
+            "runid",
+            "start",
+            "duration",
+            "exit_code",
+            "findings",
+            "infos",
+            "errors",
+            "fails"
+        ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
+        
         if not file_exists:
             writer.writeheader()
-
-        writer.writerow({"time": time, "contract": contract, "path": path})
+            
+        writer.writerow({
+            "filename": filename,
+            "basename": basename,
+            "toolid": toolid,
+            "toolmode": toolmode,
+            "parser_version": parser_version,
+            "runid": runid,
+            "start": start_time,
+            "duration": current_time-start_time,
+            "exit_code": 0,
+            "findings": f"{defecttype}",
+            "infos": f"{path}",
+            "errors": "{}",
+            "fails": "{}"
+        })
 
 
 def hex_encode(d):
@@ -490,8 +537,6 @@ def analysis(
                                 )
                                 print("\t%s" % i)
                                 reported = True
-
-                                collectpath(defect_type, time.time(), p.name, i_path)
                             if mode == "FIntendedB":
                                 ac_checks_in_sstore_path = [
                                     ins
@@ -529,7 +574,7 @@ def analysis(
                         # print(time.time(),defect_type,i_path)
                         violated_ac_count += 1
                         if support_vul == "VACC" and early_termination:
-                            collectpath(defect_type, time.time(), p.name, i_path)
+                            collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = i_path)
                             return AnalysisBugDetails(
                                 violated_ac_count,
                                 missing_ac_count,
@@ -739,19 +784,18 @@ def analysis(
                                 # print(time.time(), defect_type, tainting_path)
                                 missing_ac_count += 1
                                 if support_vul == "MACC" and early_termination:
-                                    collectpath(
-                                        defect_type, time.time(), p.name, tainting_path
-                                    )
+                                    collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = tainting_path)
                                     return AnalysisBugDetails(
                                         violated_ac_count,
                                         missing_ac_count,
                                         violated_ac_ib_count,
                                     )
-
+    collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path ="")
     return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
 
 
 def main():
+    starttime = int(time.time())
     parser = argparse.ArgumentParser()
     grp = parser.add_mutually_exclusive_group(required=True)
     grp.add_argument(
@@ -840,6 +884,8 @@ def main():
         name = args.file.rsplit("/", 1)[-1]
         p = Project(code)
         p.name = name
+        p.filename = args.file
+        p.starttime = starttime
         analysis(
             p,
             initial_storage,
@@ -848,8 +894,6 @@ def main():
             support_vul=args.vul,
             early_termination=isearly,
         )
-        # while(p.cfg.update_cfg()):
-        #     print(f"iteration is: {p.cfg.updated_bbs}")
 
 
 if __name__ == "__main__":
