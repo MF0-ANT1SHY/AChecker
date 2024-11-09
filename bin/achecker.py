@@ -506,10 +506,10 @@ def analysis(
                                 set(sstore_slot), sstore_in_function
                             )
                         )
-                        collectpath(defect_type, time.time(), p.name, i_path)
                 if reported and not IntendedB:
                     violated_ac_count += 1
                     if early_termination and support_vul == "VACC":
+                        collectpath(defect_type, time.time(), p.name, i_path)
                         return AnalysisBugDetails(
                             violated_ac_count,
                             missing_ac_count,
@@ -702,16 +702,10 @@ def analysis(
                                 cinfo.get_function_sig(p.cfg, tainted_ins[s]["path"])
                             )
                         )
-                        collectpath(defect_type, time.time(), p.name, tainting_path)
-                        if early_termination:
-                            return AnalysisBugDetails(
-                                violated_ac_count,
-                                missing_ac_count,
-                                violated_ac_ib_count,
-                            )
                         print("%s\n" % s)
                         if not MissingIntendedB:
                             missing_ac_count += 1
+                            collectpath(defect_type, time.time(), p.name, tainting_path)
                             if early_termination and support_vul == "MACC":
                                 return AnalysisBugDetails(
                                     violated_ac_count,

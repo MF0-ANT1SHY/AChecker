@@ -7,8 +7,8 @@ import time
 import json
 
 
-def append_to_csv(contract, duration):
-    filename = "duration.csv"
+def append_to_csv(contract, duration, vul=""):
+    filename = f"{vul}_duration.csv"
     file_exists = os.path.isfile(filename)
 
     with open(filename, "a", newline="") as csvfile:
@@ -38,7 +38,7 @@ def run_process(args):
     finally:
         endtime = time.time()
         duration = endtime - starttime
-        append_to_csv(name, duration)
+        append_to_csv(name, duration, vul)
 
 
 def get_file_list(directory_path):
