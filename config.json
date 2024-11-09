@@ -1,7 +1,12 @@
 [
     {
         "timeout": 1800,
-        "from": "~/smartbugs-curated/dataset/access_control",
+        "from": "/home/shuo/smartbugs-curated/full",
+        "vul": "VACC"
+    },
+    {
+        "timeout": 1800,
+        "from": "/home/shuo/smartbugs-curated/full",
         "vul": "MACC"
     }
 ]
