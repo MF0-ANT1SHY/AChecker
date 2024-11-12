@@ -35,7 +35,7 @@ def collectpath(filename, toolid="achecker", toolmode="runtime", parser_version=
     if runid is None:
         runid = time.strftime("%Y%m%d_%H%M")
     
-    output_filename = "analysis_results.csv"
+    output_filename = f"{defecttype}_analysis_results.csv"
     file_exists = os.path.isfile(output_filename)
     
     with open(output_filename, "a", newline="") as csvfile:
