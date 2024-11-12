@@ -738,8 +738,8 @@ def analysis(
                         print("%s\n" % s)
                         if not MissingIntendedB:
                             missing_ac_count += 1
-                            collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = tainting_path)
                             if early_termination and support_vul == "MACC":
+                                collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = tainting_path)
                                 return AnalysisBugDetails(
                                     violated_ac_count,
                                     missing_ac_count,

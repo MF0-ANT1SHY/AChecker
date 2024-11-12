@@ -91,4 +91,6 @@ def main():
 
 
 if __name__ == "__main__":
+    # run: bash reset.sh
+    subprocess.run(["bash", "reset.sh"])
     main()
