@@ -41,19 +41,29 @@ logging.basicConfig(level=logging.INFO)
 
 #         writer.writerow({"time": time, "contract": contract, "path": path})
 
-def collectpath(filename, toolid="achecker", toolmode="runtime", parser_version="2/27/2023", runid=None,start_time=0,defecttype='',path=''):
+
+def collectpath(
+    filename,
+    toolid="achecker(modified)",
+    toolmode="runtime",
+    parser_version="2/27/2023",
+    runid=None,
+    start_time=0,
+    defecttype="",
+    path="",
+):
     basename = os.path.basename(filename)
     current_time = time.time()
-    
+
     if runid is None:
         runid = time.strftime("%Y%m%d_%H%M")
-    
+
     output_filename = f"{defecttype}_analysis_results.csv"
     file_exists = os.path.isfile(output_filename)
-    
+
     with open(output_filename, "a", newline="") as csvfile:
         fieldnames = [
-            "filename", 
+            "filename",
             "basename",
             "toolid",
             "toolmode",
@@ -65,28 +75,30 @@ def collectpath(filename, toolid="achecker", toolmode="runtime", parser_version=
             "findings",
             "infos",
             "errors",
-            "fails"
+            "fails",
         ]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
+
         if not file_exists:
             writer.writeheader()
-            
-        writer.writerow({
-            "filename": filename,
-            "basename": basename,
-            "toolid": toolid,
-            "toolmode": toolmode,
-            "parser_version": parser_version,
-            "runid": runid,
-            "start": start_time,
-            "duration": current_time-start_time,
-            "exit_code": 0,
-            "findings": f"{defecttype}",
-            "infos": f"{path}",
-            "errors": "{}",
-            "fails": "{}"
-        })
+
+        writer.writerow(
+            {
+                "filename": filename,
+                "basename": basename,
+                "toolid": toolid,
+                "toolmode": toolmode,
+                "parser_version": parser_version,
+                "runid": runid,
+                "start": start_time,
+                "duration": current_time - start_time,
+                "exit_code": 0,
+                "findings": f"{defecttype}",
+                "infos": f"{path}",
+                "errors": "{}",
+                "fails": "{}",
+            }
+        )
 
 
 def hex_encode(d):
@@ -158,6 +170,10 @@ def analysis(
     early_termination=True,
 ):
     first_iteration = True
+    ipath = []
+    controlpath = []
+    MACC_path = []
+    MACC_path2 = []
     while first_iteration or p.cfg.update_cfg():
         print(f"======new iteration=======")
         first_iteration = False
@@ -258,7 +274,8 @@ def analysis(
                 sstore_sinks = {s.addr: [1] for s in sstores}
                 sstore_taintedBy = opcodes.potentially_direct_user_controlled
                 sload_sha3_bases = ac_sload_sha3_bases
-
+                # ipath = []
+                # controlpath = []
                 for (
                     s,
                     sstore_slot_sbyte,
@@ -276,6 +293,34 @@ def analysis(
                     storage_sha3_bases=sload_sha3_bases,
                     restricted=True,
                 ):
+                    ipath.append(
+                        (s, sstore_slot_sbyte, sstore_struct_offset, s_path, s_r)
+                    )
+
+                for (
+                    s,
+                    sstore_slot_sbyte,
+                    sstore_struct_offset,
+                    s_path,
+                    s_r,
+                ) in ipath:
+                    # for (
+                    #     s,
+                    #     sstore_slot_sbyte,
+                    #     sstore_struct_offset,
+                    #     s_path,
+                    #     s_r,
+                    # ) in p.extract_paths(
+                    #     ssa,
+                    #     sstores,
+                    #     sstore_sinks,
+                    #     sstore_taintedBy,
+                    #     defect_type="Storage-Tainting",
+                    #     args=[1],
+                    #     storage_slots=ac_sload_slots,
+                    #     storage_sha3_bases=sload_sha3_bases,
+                    #     restricted=True,
+                    # ):
                     logging.debug("%s: %s", "SSTORE", s)
                     logging.debug("Path: %s", "->".join("%x" % p for p in s_path))
                     if s_r._tainted:
@@ -458,6 +503,8 @@ def analysis(
                                 resolve_later.append(sstore_ins)
                 checked_access_paths = defaultdict(list)
                 for i, i_path in p.extract_control_paths(slices, imap):
+                    controlpath.append((i, i_path))
+                for i, i_path in controlpath:
                     logging.debug("%s: %s", ins_type, i)
                     logging.debug("Path: %s", "->".join("%x" % p for p in i_path))
                     current_ac_check_slots = [
@@ -574,7 +621,12 @@ def analysis(
                         # print(time.time(),defect_type,i_path)
                         violated_ac_count += 1
                         if support_vul == "VACC" and early_termination:
-                            collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = i_path)
+                            collectpath(
+                                filename=p.filename,
+                                start_time=p.starttime,
+                                defecttype=defect_type,
+                                path=i_path,
+                            )
                             return AnalysisBugDetails(
                                 violated_ac_count,
                                 missing_ac_count,
@@ -624,6 +676,16 @@ def analysis(
                         restricted=restricted,
                         memory_info=None,
                     ):
+                        MACC_path.append(
+                            (j, j_ins_slot_sbyte, j_ins_struct_offset, j_path, j_r)
+                        )
+                    for (
+                        j,
+                        j_ins_slot_sbyte,
+                        j_ins_struct_offset,
+                        j_path,
+                        j_r,
+                    ) in MACC_path:
                         logging.debug("%s: %s", ins_type, j)
                         logging.debug("Path: %s", "->".join("%x" % p for p in j_path))
                         if (
@@ -684,6 +746,22 @@ def analysis(
                                     storage_sha3_bases=sload_sha3_bases,
                                     restricted=True,
                                 ):
+                                    MACC_path2.append(
+                                        (
+                                            js,
+                                            js_sstore_slot_sbyte,
+                                            js_sstore_struct_offset,
+                                            js_path,
+                                            js_r,
+                                        )
+                                    )
+                                for (
+                                    js,
+                                    js_sstore_slot_sbyte,
+                                    js_sstore_struct_offset,
+                                    js_path,
+                                    js_r,
+                                ) in MACC_path2:
                                     if js_r._tainted and (
                                         set([j_ins_slot_sbyte[j]])
                                         & set([js_sstore_slot_sbyte[js]])
@@ -784,13 +862,20 @@ def analysis(
                                 # print(time.time(), defect_type, tainting_path)
                                 missing_ac_count += 1
                                 if support_vul == "MACC" and early_termination:
-                                    collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path = tainting_path)
+                                    collectpath(
+                                        filename=p.filename,
+                                        start_time=p.starttime,
+                                        defecttype=defect_type,
+                                        path=tainting_path,
+                                    )
                                     return AnalysisBugDetails(
                                         violated_ac_count,
                                         missing_ac_count,
                                         violated_ac_ib_count,
                                     )
-    collectpath(filename=p.filename,start_time=p.starttime,defecttype=defect_type,path ="")
+    collectpath(
+        filename=p.filename, start_time=p.starttime, defecttype=defect_type, path=""
+    )
     return AnalysisBugDetails(violated_ac_count, missing_ac_count, violated_ac_ib_count)
 
 
